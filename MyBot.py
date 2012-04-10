@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from ants import *
 from random import shuffle
+import random
 
 # define a class with a do_turn method
 # the Ants.run method will parse and update bot input
@@ -219,6 +220,61 @@ class MyBot:
                     if self.do_move_location(ants, orders, ant_loc, unseen_loc, 'LAND'):
                         break
     
+    
+    def bound(self, ants, loc):
+        return (loc[0]%ants.rows, loc[1]%ants.cols)
+
+    def time_check(self, ants):
+        if ants.time_remaining() < 10:
+            return True
+        else:
+            return False
+
+
+    def random_location(self, ants):
+        x = (random.randint(0, ants.rows), random.randint(0, ants.cols))
+        while ants.visible(x) and not ants.passable(x):
+            x = (random.randint(0, ants.rows), random.randint(0, ants.cols))
+        return x
+
+    def bread_crumb(self, ants, orders):
+        for ant in ants.my_ants():
+
+            if ant in orders.values():
+                continue 
+
+            #if ant in self.mission:
+            #    if ant == self.mission[ant]:
+            #        del self.mission[ant]
+            #    else:
+            #        do_move_location(ant, self.mission[ant])
+            #        break
+
+               
+            d = 1
+            #directions = ['n', 'e', 's', 'w']
+            u = []
+            while len(u) == 0 and d<5:
+                d += 2
+                expansions = [(ant[0] + d , ant[1]), (ant[0] - d, ant[1]), (ant[0], ant[1] + d), (ant[0], ant[1] - d)]
+                expansions = [self.bound(ants, x) for x in expansions] #map(self.bound, expansions)
+                for loc in expansions:
+                    if not ants.visible(loc) and ants.passable(loc) and ants.unoccupied(loc) and loc not in orders.values():
+                        u.append(loc)
+            
+            if not len(u) == 0:
+                random.shuffle(u)
+                self.do_move_location(ants, orders, ant, u[0], 'EXPLORE')
+            else:
+                #self.mission[ant] = random_location()
+                #self.do_move_location(ants, orders, ant, self.mission[ant])
+                self.do_move_location(ants, orders, ant, self.random_location(ants), 'EXPLORE')
+
+            if self.time_check(ants):
+                return
+
+    
+    
     def do_turn(self, ants): 
         orders = {} # tracks what moves have been
         
@@ -255,6 +311,7 @@ class MyBot:
         
         # explore the map!
         #self.explore(ants, orders)
+        self.bread_crumb(ants, orders)
         
         # default move
         
