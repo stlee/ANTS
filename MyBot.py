@@ -10,11 +10,13 @@ class MyBot:
     def __init__(self):
         self.unseen = [] # unseen locations on the map
         self.hills = [] # enemy ant hills
-        self.our_ants = [] #all our ants that aren't assigned to other stuff.  Cutting down list comprehension stuff
+        self.our_ants = set() #all our ants that aren't assigned to other stuff.  Cutting down list comprehension stuff
         self.food_targets = {} # targets that are food 
         self.hill_targets = {} # targets that are enemy hills
         self.targets = {} # targets that are an empty piece of land
         self.out = open('meow.txt','w')
+        self.rev_orders = {}
+        self.expansions = {(1,0),(0,1),(-1,0),(0,-1),(3,0),(0,3),(-3,0),(0,-3)}
     
     
     def do_setup(self,ants):
@@ -28,9 +30,12 @@ class MyBot:
     # map blocks before doing so.
     def do_move_direction(self, ants, orders, loc, direction):
         new_loc = ants.destination(loc, direction)
-        if (ants.unoccupied(new_loc) and new_loc not in orders and loc not in orders.values()):
+        if (ants.unoccupied(new_loc) and new_loc not in orders and loc in self.our_ants):#not in orders.values()):
             ants.issue_order((loc, direction))
             orders[new_loc] = loc
+            self.rev_orders[loc] = new_loc
+            if loc in self.our_ants:
+                self.our_ants.remove(loc)
             return True
         else:
             return False
@@ -51,6 +56,10 @@ class MyBot:
         if not reduce(lambda x,y: x or y, map(lambda x : ants.passable(x) and x not in orders, dests)):
             man = man
         return man    
+    
+    def worstDist(self, loc1, loc2):
+        return abs(loc1[0] - loc2[0]) + abs(loc1[1] - loc2[1])
+        
      
      
     def trace_path(self, came_from, current_node):    
@@ -81,7 +90,7 @@ class MyBot:
                 return False
         
         closedset = []
-        openset = [loc]
+        openset = set([loc])#[loc]
         came_from = {}
     
         g_score = {}
@@ -89,10 +98,11 @@ class MyBot:
         f_score = {}
     
         g_score[loc] = 0
-        h_score[loc] = self.betterDist(ants, orders, loc, dest)
+        #h_score[loc] = 5*self.betterDist(ants, orders, loc, dest)
+        h_score[loc] = 3*self.worstDist(loc, dest)
         f_score[loc] = g_score[loc] + h_score[loc]
         
-        while openset:
+        while len(openset) != 0:
             current = min(f_score, key = lambda x: f_score.get(x))
     
             if current == dest:
@@ -113,7 +123,7 @@ class MyBot:
     
             
             del f_score[current]
-            openset.remove(current)
+            openset.remove(current) #openset.remove(current)
             closedset.append(current)
     
             # explore possible directions
@@ -126,7 +136,7 @@ class MyBot:
     
                 tentative_g_score = g_score[current] + 1
                 if neighbor not in openset:
-                    openset.append(neighbor)
+                    openset.add(neighbor)#append(neighbor)
                     h_score[neighbor] = self.betterDist(ants, orders, neighbor, dest)
                     tentative_is_better = True
                 elif tentative_g_score < g_score[neighbor]:
@@ -145,11 +155,12 @@ class MyBot:
     # Updates the targets to reflect when an ant moves
     def update_targets(self, orders, targets):
         for (tar_loc, ant_loc) in targets.items():
-            if ant_loc in orders.values(): # this means the ant it was assigned to has moved
+            if ant_loc not in self.our_ants: #in orders.values(): # this means the ant it was assigned to has moved
                 if ant_loc == tar_loc: # target has been reached!
                     del targets[tar_loc]
                 else: # not there yet, but closer!
-                    new_loc = [nloc for nloc in orders if orders[nloc] == ant_loc][0] # get ant's new location
+                    #new_loc = [nloc for nloc in orders if orders[nloc] == ant_loc][0] # get ant's new location
+                    new_loc = self.rev_orders[ant_loc]
                     targets[tar_loc] = new_loc
        
     
@@ -174,14 +185,14 @@ class MyBot:
         
     
     def hunt_hills(self, ants, orders):
-        targs = list(self.targets.values() + self.hill_targets.values() + self.food_targets.values())
+        targs = set(self.targets.values() + self.hill_targets.values() + self.food_targets.values())  # changed to set from list...
         antz = [aloc for aloc in ants.my_ants() if aloc not in targs]
         
         for hill_loc, hill_owner in ants.enemy_hills():
             if hill_loc not in self.hills:
                 self.hills.append(hill_loc)        
         
-        for hill_loc in self.hills:    
+        for hill_loc in self.hills:
             self.out.write('WE FOUND A HILLLLLLLlllll\n')
             #self.out.flush()
             for ant_loc in antz:
@@ -225,7 +236,7 @@ class MyBot:
         return (loc[0]%ants.rows, loc[1]%ants.cols)
 
     def time_check(self, ants):
-        if ants.time_remaining() < 10:
+        if ants.time_remaining() < 10000:
             return True
         else:
             return False
@@ -233,15 +244,20 @@ class MyBot:
 
     def random_location(self, ants):
         x = (random.randint(0, ants.rows), random.randint(0, ants.cols))
-        while ants.visible(x) and not ants.passable(x):
-            x = (random.randint(0, ants.rows), random.randint(0, ants.cols))
+        #while ants.visible(x) and not ants.passable(x):
+        #while not ants.passable(x) and not self.time_check(ants):
+        #    x = (random.randint(0, ants.rows), random.randint(0, ants.cols))
         return x
 
     def bread_crumb(self, ants, orders):
-        for ant in ants.my_ants():
+        #for ant in ants.my_ants():
+        #self.out.write('Started bread_crumb\n')
+        #self.out.flush()
+        
+        for ant in list(self.our_ants):
 
-            if ant in orders.values():
-                continue 
+            #if ant in orders.values():
+            #    continue 
 
             #if ant in self.mission:
             #    if ant == self.mission[ant]:
@@ -254,13 +270,18 @@ class MyBot:
             d = 1
             #directions = ['n', 'e', 's', 'w']
             u = []
-            while len(u) == 0 and d<5:
-                d += 2
-                expansions = [(ant[0] + d , ant[1]), (ant[0] - d, ant[1]), (ant[0], ant[1] + d), (ant[0], ant[1] - d)]
-                expansions = [self.bound(ants, x) for x in expansions] #map(self.bound, expansions)
-                for loc in expansions:
-                    if not ants.visible(loc) and ants.passable(loc) and ants.unoccupied(loc) and loc not in orders.values():
-                        u.append(loc)
+            #while len(u) == 0 and d<=3:
+            #    d += 2
+            #    expansions = [(ant[0] + d , ant[1]), (ant[0] - d, ant[1]), (ant[0], ant[1] + d), (ant[0], ant[1] - d)]
+            #    expansions = [self.bound(ants, x) for x in expansions] #map(self.bound, expansions)
+            #    for loc in expansions:
+            #        if not ants.visible(loc) and ants.passable(loc) and ants.unoccupied(loc) and loc not in orders:
+            #            u.append(loc)
+
+            for e in self.expansions:
+                loc = self.bound(ants, (ant[0] + e[0], ant[1] + e[1]))
+                if not ants.visible(loc) and ants.passable(loc) and ants.unoccupied(loc) and loc not in orders:
+                    u.append(loc)
             
             if not len(u) == 0:
                 random.shuffle(u)
@@ -272,11 +293,16 @@ class MyBot:
 
             if self.time_check(ants):
                 return
+                
+        #self.out.write('Finished bread_crumb\n')
+        #self.out.flush()
 
     
     
     def do_turn(self, ants): 
         orders = {} # tracks what moves have been
+        self.our_ants = set(ants.my_ants())
+        self.rev_orders = {}
         
         # get off my lawn!
         for hill_loc in ants.my_hills():
@@ -315,6 +341,7 @@ class MyBot:
         
         # default move
         
+        """
         for ant_loc in ants.my_ants():
             if ants.time_remaining() < 10:
                 break
@@ -325,7 +352,7 @@ class MyBot:
                 for direction in directions:
                     if self.do_move_direction(ants, orders, ant_loc, direction):
                         break #used to be break but that doesn't make sense...
-                        
+        """                 
         
         self.update_targets(orders, self.food_targets)
         self.update_targets(orders, self.hill_targets)
